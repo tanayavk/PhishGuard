@@ -13,7 +13,7 @@ def _parsed_to_artifacts(parsed: "ParsedEmailResult", message_id: str) -> Extrac
         subject=parsed.subject_header or "",
         return_path=parsed.return_path_header,
         urls=parsed.urls,
-        qr_urls=[],  # QR URLs are extracted separately when mapping to artifacts
+        qr_urls=parsed.qr_urls,
         attachment_hashes=parsed.attachment_hashes,
     )
 
@@ -40,5 +40,5 @@ def fetch_unread_emails(max_results: int = 5) -> list["ExtractedArtifacts"]:
     parsed_emails = _fetch_unread_emails(max_count=max_results)
     artifacts = []
     for i, parsed in enumerate(parsed_emails):
-        artifacts.append(_parsed_to_artifacts(parsed, message_id=f"msg{i+1}"))
+        artifacts.append(_parsed_to_artifacts(parsed, message_id=parsed.message_id or f"msg{i+1}"))
     return artifacts
