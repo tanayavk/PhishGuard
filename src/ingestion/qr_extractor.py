@@ -1,3 +1,4 @@
+from typing import List
 def extract_qr_codes(image_bytes: bytes) -> List[str]:
     """Decode QR codes from image bytes.
 

@@ -6,3 +6,5 @@ google-auth-httplib2
 pillow
 pyzbar
 python-dotenv
+qrcode[pil]
+opencv-python-headless
