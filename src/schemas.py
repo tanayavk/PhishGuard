@@ -10,6 +10,7 @@ class VerdictEnum(str, Enum):
     SAFE = "safe"
     SUSPICIOUS = "suspicious"
     MALICIOUS = "malicious"
+    INCONCLUSIVE = "inconclusive"
 
 
 class ActionEnum(str, Enum):
@@ -34,6 +35,7 @@ class AnalysisSignals(BaseModel):
     vt_reputation: Dict[str, Dict[str, int]] = Field(default_factory=dict)
     static_attachment_flags: List[str] = Field(default_factory=list)
     needs_agent_investigation: bool = False
+    analysis_incomplete: bool = False
 
 
 class AgentInvestigationResult(BaseModel):
