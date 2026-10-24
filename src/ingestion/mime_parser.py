@@ -27,7 +27,10 @@ class ParsedEmailResult:
         html_body: Optional[str],
         urls: List[str],
         attachment_hashes: List[Dict[str, str]] = None,
+        qr_urls: List[str] = None,
+        message_id: Optional[str] = None,
     ):
+        self.message_id = message_id
         self.from_header = from_header
         self.subject_header = subject_header
         self.return_path_header = return_path_header
@@ -36,6 +39,7 @@ class ParsedEmailResult:
         self.html_body = html_body
         self.urls = urls
         self.attachment_hashes = attachment_hashes if attachment_hashes is not None else []
+        self.qr_urls = qr_urls if qr_urls is not None else []
 
     def __repr__(self) -> str:
         pt = self.plain_text_body[:40] if self.plain_text_body else None
@@ -171,7 +175,7 @@ def _extract_attachment_hashes(msg) -> List[Dict[str, str]]:
     return hashes
 
 
-def parse_email(raw_email: bytes) -> ParsedEmailResult:
+def parse_email(raw_email: bytes, message_id: Optional[str] = None) -> ParsedEmailResult:
     """Parse a raw RFC 5322 email byte string and extract headers and bodies.
 
     Uses Python's standard `email` package for safe parsing without external dependencies.
@@ -208,6 +212,7 @@ def parse_email(raw_email: bytes) -> ParsedEmailResult:
             plain_text_body=None,
             html_body=None,
             urls=[],
+            message_id=message_id,
         )
 
     # Parse the raw email using the standard library
@@ -223,6 +228,7 @@ def parse_email(raw_email: bytes) -> ParsedEmailResult:
             plain_text_body=None,
             html_body=None,
             urls=[],
+            message_id=message_id,
         )
 
     # Extract the four requested headers
@@ -267,8 +273,8 @@ def parse_email(raw_email: bytes) -> ParsedEmailResult:
     # If no plain text found but HTML exists, try to strip HTML tags for plain text fallback
     if plain_text_body is None and html_body is not None:
         # Simple strip - just try to extract some readable text
-        plain_text_body = re.sub("<[^>]+>", html_body)
-        plain_text_body = re.sub(r"\n", plain_text_body)
+        plain_text_body = re.sub(r"<[^>]+>", " ", html_body)
+        plain_text_body = re.sub(r"\s+", " ", plain_text_body).strip()
 
     # Extract URLs from both bodies
     plain_urls: List[str] = []
@@ -284,15 +290,11 @@ def parse_email(raw_email: bytes) -> ParsedEmailResult:
 
     attachment_hashes = _extract_attachment_hashes(msg)
 
-    # Extract QR codes from image attachments
+    # Extract QR codes from attached and inline image parts
     qr_urls: List[str] = []
     for part in msg.walk():
-        content_disposition = part.get("Content-Disposition", "")
-        if "attachment" not in content_disposition.lower():
-            continue
         mime_type = part.get_content_type()
-        # Only process image attachments for QR code extraction
-        if not mime_type.startswith("image/"):
+        if not mime_type.startswith('image/'):
             continue
         payload = part.get_payload(decode=True)
         if payload is None:
@@ -310,6 +312,8 @@ def parse_email(raw_email: bytes) -> ParsedEmailResult:
         html_body=html_body,
         urls=all_urls,
         attachment_hashes=attachment_hashes,
+        qr_urls=_deduplicate_urls(qr_urls),
+        message_id=message_id,
         # Note: qr_urls is not a field of ParsedEmailResult;
         # QR URLs are extracted separately when mapping to ExtractedArtifacts.
         # This call to extract_qr_codes is performed here for integration
