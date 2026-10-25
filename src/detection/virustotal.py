@@ -2,7 +2,6 @@
 """VirusTotal URL reputation client with safe failure handling."""
 
 import base64
-import os
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -50,7 +49,9 @@ def analyze_url_reputation(url: str) -> dict[str, Any]:
     except (ValueError, UnicodeError):
         return _unknown_result("Invalid URL")
 
-    api_key = os.getenv("VT_API_KEY")
+    from src.config import get_vt_api_key
+
+    api_key = get_vt_api_key()
     if not api_key:
         return _unknown_result("VT_API_KEY is not configured")
 

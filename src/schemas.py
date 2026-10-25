@@ -41,8 +41,13 @@ class AnalysisSignals(BaseModel):
 class AgentInvestigationResult(BaseModel):
     reasoning: str
     red_flags: List[str]
-    confidence_delta: float
-
+    confidence_delta: float = Field(
+        ge=-1.0,
+        le=1.0,
+        allow_inf_nan=False,
+    )
+    continue_investigation: bool = False
+    next_question: Optional[str] = None
 
 class FinalSecurityReport(BaseModel):
     message_id: str

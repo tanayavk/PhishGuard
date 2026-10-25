@@ -1,4 +1,4 @@
-
+﻿
 """Orchestrate offline indicators, reputation lookups, scoring, and reporting."""
 
 from __future__ import annotations
@@ -9,6 +9,9 @@ from src.detection.virustotal import analyze_url_reputation
 from src.detection.attachment_check import analyze_attachment
 from src.orchestrator.policy_engine import score_risk
 from src.reporting.report_builder import build_report
+from src.orchestrator.agent import investigate_artifact
+from src.config import get_gemini_api_key
+from src.orchestrator.gemini_provider import investigate_with_gemini
 
 
 def analyze_artifacts(artifacts: ExtractedArtifacts) -> FinalSecurityReport:
@@ -123,6 +126,7 @@ def analyze_artifacts(artifacts: ExtractedArtifacts) -> FinalSecurityReport:
         url_scores=url_scores,
         vt_reputation=successful_reputations,
         static_attachment_flags=attachment_flags,
+        needs_agent_investigation=analysis_incomplete,
         analysis_incomplete=analysis_incomplete
     )
 
@@ -136,4 +140,64 @@ def analyze_artifacts(artifacts: ExtractedArtifacts) -> FinalSecurityReport:
 
     risk_result["evidence"] = combined_evidence
 
-    return build_report(artifacts, risk_result)
+
+
+    agent_notes: str | None = None
+
+    # Investigate uncertain cases only. Use Gemini when configured;
+    # otherwise preserve the safe offline fallback.
+    if signals.needs_agent_investigation:
+        def offline_investigation_tool(
+            question: str,
+        ) -> dict[str, object]:
+            return {
+                "reasoning": (
+                    "The available analysis is incomplete. "
+                    "No additional live investigation provider is configured."
+                ),
+                "red_flags": [
+                    "Additional investigation is unavailable in offline mode"
+                ],
+                "confidence_delta": 0.0,
+                "continue_investigation": False,
+            }
+
+        investigation_tool = (
+            investigate_with_gemini
+            if get_gemini_api_key()
+            else offline_investigation_tool
+        )
+
+
+        try:
+            agent_result = investigate_artifact(
+                evidence=combined_evidence,
+                investigation_tool=investigation_tool,
+            )
+
+            notes = [
+                agent_result.get("reasoning", ""),
+                *agent_result.get("red_flags", []),
+            ]
+            agent_notes = "\n".join(
+                item.strip()
+                for item in notes
+                if isinstance(item, str) and item.strip()
+            )
+
+            trace = agent_result.get("trace", [])
+            if trace:
+                agent_notes += (
+                    "\nInvestigation trace: "
+                    + str([
+                        event.get("event")
+                        for event in trace
+                        if isinstance(event, dict)
+                    ])
+                )
+
+        except Exception:
+            # Agent failure must not make uncertain evidence look safe.
+            agent_notes = "Additional investigation failed; analysis remains incomplete."
+
+    return build_report(artifacts, risk_result, agent_notes=agent_notes)

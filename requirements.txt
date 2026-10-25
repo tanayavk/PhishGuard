@@ -8,3 +8,5 @@ pyzbar
 python-dotenv
 qrcode[pil]
 opencv-python-headless
+
+google-genai>=2.33.0,<3.0.0
