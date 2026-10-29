@@ -28,14 +28,18 @@ class ExtractedArtifacts(BaseModel):
     urls: List[str] = Field(default_factory=list)
     qr_urls: List[str] = Field(default_factory=list)
     attachment_hashes: List[Dict[str, str]] = Field(default_factory=list)
-
+    attachment_validation_results: List[Dict[str, str]] = Field(
+    default_factory=list
+)
 
 class AnalysisSignals(BaseModel):
     url_scores: Dict[str, float] = Field(default_factory=dict)
+    url_ml_scores: Dict[str, float] = Field(default_factory=dict)
     vt_reputation: Dict[str, Dict[str, int]] = Field(default_factory=dict)
     static_attachment_flags: List[str] = Field(default_factory=list)
     needs_agent_investigation: bool = False
     analysis_incomplete: bool = False
+
 
 
 class AgentInvestigationResult(BaseModel):

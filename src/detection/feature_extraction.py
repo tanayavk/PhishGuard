@@ -3,7 +3,104 @@
 
 from ipaddress import ip_address
 from urllib.parse import urlsplit
+from collections import Counter
+from math import log2
 
+
+SUSPICIOUS_KEYWORDS = {
+    "login",
+    "verify",
+    "verification",
+    "update",
+    "secure",
+    "account",
+    "password",
+    "signin",
+    "sign-in",
+    "confirm",
+    "wallet",
+    "banking",
+    "authenticate",
+    "reset",
+}
+
+
+def _calculate_entropy(value: str) -> float:
+    """Calculate Shannon entropy for a string."""
+    if not value:
+        return 0.0
+
+    length = len(value)
+    frequencies = Counter(value)
+
+    return -sum(
+        (count / length) * log2(count / length)
+        for count in frequencies.values()
+    )
+
+
+def extract_url_features(url: str) -> dict[str, float]:
+    """Extract numeric lexical features without making network requests.
+
+    Invalid URLs return zero-valued features. These values are indicators,
+    not a verdict that a URL is safe or malicious.
+    """
+    feature_names = {
+        "url_length": 0.0,
+        "hostname_length": 0.0,
+        "is_ip_host": 0.0,
+        "dot_count": 0.0,
+        "hyphen_count": 0.0,
+        "at_count": 0.0,
+        "domain_entropy": 0.0,
+        "suspicious_keyword_count": 0.0,
+    }
+
+    if not isinstance(url, str) or not url.strip():
+        return feature_names
+
+    candidate = url.strip()
+
+    try:
+        parsed = urlsplit(candidate)
+
+        if parsed.scheme.lower() not in {"http", "https"}:
+            return feature_names
+
+        hostname = parsed.hostname
+        if not hostname:
+            return feature_names
+
+        # Validate malformed or out-of-range ports.
+        _ = parsed.port
+
+        hostname = hostname.lower()
+
+        try:
+            ip_address(hostname)
+            is_ip_host = 1.0
+        except ValueError:
+            is_ip_host = 0.0
+
+        searchable_text = candidate.lower()
+        keyword_count = sum(
+            searchable_text.count(keyword)
+            for keyword in SUSPICIOUS_KEYWORDS
+        )
+
+        return {
+            "url_length": float(len(candidate)),
+            "hostname_length": float(len(hostname)),
+            "is_ip_host": is_ip_host,
+            "dot_count": float(hostname.count(".")),
+            "hyphen_count": float(hostname.count("-")),
+            "at_count": float(candidate.count("@")),
+            "domain_entropy": float(_calculate_entropy(hostname)),
+            "suspicious_keyword_count": float(keyword_count),
+        }
+
+    except (ValueError, UnicodeError):
+        return feature_names
 
 def analyze_url(url: str) -> dict:
     """Return a heuristic risk score and explainable indicators.

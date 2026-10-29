@@ -2,6 +2,7 @@
 """Offline tests for PhishGuard URL threat analysis."""
 
 from src.detection.feature_extraction import analyze_url
+from src.detection.feature_extraction import extract_url_features
 
 
 def test_legitimate_https_url():
@@ -66,3 +67,56 @@ def test_out_of_range_port_returns_safe_default():
 
     assert result["score"] == 0
     assert result["reasons"] == ["Malformed or unsupported URL"]
+
+
+def test_extract_url_features_returns_expected_keys():
+    features = extract_url_features(
+        "https://secure-account.example.com/login"
+    )
+
+    assert set(features) == {
+        "url_length",
+        "hostname_length",
+        "is_ip_host",
+        "dot_count",
+        "hyphen_count",
+        "at_count",
+        "domain_entropy",
+        "suspicious_keyword_count",
+    }
+
+
+def test_extract_url_features_detects_ip_host():
+    features = extract_url_features("https://192.0.2.10/login")
+
+    assert features["is_ip_host"] == 1.0
+
+
+def test_extract_url_features_counts_domain_characters():
+    features = extract_url_features(
+        "https://secure-account.example.com/login"
+    )
+
+    assert features["dot_count"] == 2.0
+    assert features["hyphen_count"] == 1.0
+    assert features["at_count"] == 0.0
+
+
+def test_extract_url_features_detects_suspicious_keywords():
+    features = extract_url_features(
+        "https://secure-account.example.com/login"
+    )
+
+    assert features["suspicious_keyword_count"] >= 2.0
+
+
+def test_extract_url_features_handles_invalid_input():
+    features = extract_url_features("not a URL")
+
+    assert all(value == 0.0 for value in features.values())
+
+
+def test_extract_url_features_handles_empty_input():
+    features = extract_url_features("")
+
+    assert all(value == 0.0 for value in features.values())
