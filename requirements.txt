@@ -6,3 +6,9 @@ google-auth-httplib2
 pillow
 pyzbar
 python-dotenv
+qrcode[pil]
+opencv-python-headless
+
+google-genai>=2.33.0,<3.0.0
+scikit-learn==1.9.1
+joblib==1.6.0

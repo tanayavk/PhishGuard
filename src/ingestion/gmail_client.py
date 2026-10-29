@@ -15,6 +15,9 @@ def _parsed_to_artifacts(parsed: "ParsedEmailResult", message_id: str) -> Extrac
         urls=parsed.urls,
         qr_urls=parsed.qr_urls,
         attachment_hashes=parsed.attachment_hashes,
+        attachment_validation_results=getattr(
+    parsed, "attachment_validation_results", []
+),
     )
 
 

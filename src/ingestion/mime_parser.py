@@ -4,7 +4,7 @@ import hashlib
 import re
 import email
 from email import policy
-from typing import List, Optional
+from typing import Dict,List, Optional
 
 from src.ingestion.qr_extractor import extract_qr_codes
 
@@ -27,6 +27,7 @@ class ParsedEmailResult:
         html_body: Optional[str],
         urls: List[str],
         attachment_hashes: List[Dict[str, str]] = None,
+        attachment_validation_results: List[Dict[str, str]] = None,
         qr_urls: List[str] = None,
         message_id: Optional[str] = None,
     ):
@@ -39,6 +40,11 @@ class ParsedEmailResult:
         self.html_body = html_body
         self.urls = urls
         self.attachment_hashes = attachment_hashes if attachment_hashes is not None else []
+        self.attachment_validation_results = (
+            attachment_validation_results
+            if attachment_validation_results is not None
+            else []
+)
         self.qr_urls = qr_urls if qr_urls is not None else []
 
     def __repr__(self) -> str:
@@ -138,41 +144,96 @@ def _deduplicate_urls(urls: List[str]) -> List[str]:
     return result
 
 
-def _extract_attachment_hashes(msg) -> List[Dict[str, str]]:
-    """Extract attachment hashes from a MIME message.
+# def _extract_attachment_hashes(msg) -> List[Dict[str, str]]:
+#     """Extract attachment hashes from a MIME message.
 
-    For each part with Content-Disposition: attachment, compute SHA-256
-    of the decoded payload and record filename, sha256, and mime type.
-    Handles missing filenames and missing payloads sensibly.
+#     For each part with Content-Disposition: attachment, compute SHA-256
+#     of the decoded payload and record filename, sha256, and mime type.
+#     Handles missing filenames and missing payloads sensibly.
+#     """
+#     hashes: List[Dict[str, str]] = []
+#     for part in msg.walk():
+#         content_disposition = part.get("Content-Disposition", "")
+#         if "attachment" not in content_disposition.lower():
+#             continue
+
+#         # Extract filename from Content-Disposition header
+#         filename: Optional[str] = None
+#         import re as re_mod
+#         m = re_mod.search(r'filename=["\']?([^"\';,]+)["\']?', content_disposition)
+#         if m:
+#             filename = m.group(1)
+
+#         # Extract content type (mime)
+#         mime_type = part.get_content_type()
+
+#         # Compute SHA-256 of decoded payload
+#         payload = part.get_payload(decode=True)
+#         sha256 = hashlib.sha256(payload).hexdigest() if payload is not None else ""
+
+#         hashes.append(
+#             {
+#                 "filename": filename or "",
+#                 "sha256": sha256,
+#                 "mime": mime_type,
+#             }
+#         )
+#     return hashes
+
+def _extract_attachment_hashes(msg) -> tuple[
+    List[Dict[str, str]],
+    List[Dict[str, str]],
+]:
+    """Extract attachment hashes and validate supported file signatures.
+
+    Raw attachment bytes are inspected in memory and are never returned.
     """
+    from src.detection.attachment_check import validate_magic_bytes
+
     hashes: List[Dict[str, str]] = []
+    validation_results: List[Dict[str, str]] = []
+
     for part in msg.walk():
         content_disposition = part.get("Content-Disposition", "")
         if "attachment" not in content_disposition.lower():
             continue
 
-        # Extract filename from Content-Disposition header
-        filename: Optional[str] = None
-        import re as re_mod
-        m = re_mod.search(r'filename=["\']?([^"\';,]+)["\']?', content_disposition)
-        if m:
-            filename = m.group(1)
-
-        # Extract content type (mime)
+        filename = part.get_filename() or ""
         mime_type = part.get_content_type()
 
-        # Compute SHA-256 of decoded payload
         payload = part.get_payload(decode=True)
         sha256 = hashlib.sha256(payload).hexdigest() if payload is not None else ""
 
-        hashes.append(
-            {
-                "filename": filename or "",
-                "sha256": sha256,
-                "mime": mime_type,
-            }
-        )
-    return hashes
+        hashes.append({
+            "filename": filename,
+            "sha256": sha256,
+            "mime": mime_type,
+        })
+
+        if payload is None:
+            status = "unknown"
+            detail = "Attachment payload could not be decoded"
+        else:
+            signature_match = validate_magic_bytes(mime_type, payload)
+
+            if signature_match is True:
+                status = "match"
+                detail = "Supported file signature matches declared MIME type"
+            elif signature_match is False:
+                status = "mismatch"
+                detail = "Attachment content does not match declared MIME type"
+            else:
+                status = "unsupported"
+                detail = "No signature rule exists for declared MIME type"
+
+        validation_results.append({
+            "filename": filename,
+            "mime": mime_type,
+            "status": status,
+            "detail": detail,
+        })
+
+    return hashes, validation_results
 
 
 def parse_email(raw_email: bytes, message_id: Optional[str] = None) -> ParsedEmailResult:
@@ -288,7 +349,9 @@ def parse_email(raw_email: bytes, message_id: Optional[str] = None) -> ParsedEma
 
     all_urls = _deduplicate_urls(plain_urls + html_urls)
 
-    attachment_hashes = _extract_attachment_hashes(msg)
+    attachment_hashes, attachment_validation_results = (
+    _extract_attachment_hashes(msg)
+)
 
     # Extract QR codes from attached and inline image parts
     qr_urls: List[str] = []
@@ -314,6 +377,7 @@ def parse_email(raw_email: bytes, message_id: Optional[str] = None) -> ParsedEma
         attachment_hashes=attachment_hashes,
         qr_urls=_deduplicate_urls(qr_urls),
         message_id=message_id,
+        attachment_validation_results=attachment_validation_results,
         # Note: qr_urls is not a field of ParsedEmailResult;
         # QR URLs are extracted separately when mapping to ExtractedArtifacts.
         # This call to extract_qr_codes is performed here for integration

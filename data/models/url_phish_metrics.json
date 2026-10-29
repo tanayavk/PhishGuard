@@ -1,0 +1,68 @@
+{
+  "dataset": "PhiUSIIL Phishing URL Dataset",
+  "label_mapping": {
+    "0": "phishing",
+    "1": "legitimate"
+  },
+  "feature_names": [
+    "url_length",
+    "hostname_length",
+    "is_ip_host",
+    "dot_count",
+    "hyphen_count",
+    "at_count",
+    "domain_entropy",
+    "suspicious_keyword_count"
+  ],
+  "random_state": 42,
+  "test_size": 0.2,
+  "train_records": 188296,
+  "test_records": 47074,
+  "usable_unique_records": 235370,
+  "skipped_records": 425,
+  "accuracy": 0.9470195861834558,
+  "precision_phishing": 0.9814632545931758,
+  "recall_phishing": 0.8928074015121369,
+  "f1_phishing": 0.9350385496978537,
+  "confusion_matrix_labels": [
+    "phishing (0)",
+    "legitimate (1)"
+  ],
+  "confusion_matrix": [
+    [
+      17949,
+      2155
+    ],
+    [
+      339,
+      26631
+    ]
+  ],
+  "classification_report": {
+    "phishing": {
+      "precision": 0.9814632545931758,
+      "recall": 0.8928074015121369,
+      "f1-score": 0.9350385496978537,
+      "support": 20104.0
+    },
+    "legitimate": {
+      "precision": 0.9251372194816925,
+      "recall": 0.9874304783092325,
+      "f1-score": 0.955269388047923,
+      "support": 26970.0
+    },
+    "accuracy": 0.9470195861834558,
+    "macro avg": {
+      "precision": 0.9533002370374342,
+      "recall": 0.9401189399106846,
+      "f1-score": 0.9451539688728884,
+      "support": 47074.0
+    },
+    "weighted avg": {
+      "precision": 0.9491925071114087,
+      "recall": 0.9470195861834558,
+      "f1-score": 0.9466293580060784,
+      "support": 47074.0
+    }
+  }
+}

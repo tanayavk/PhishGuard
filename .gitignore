@@ -8,3 +8,9 @@ __pycache__/
 .pytest_cache/
 *.py[cod]
 data/cache.db
+# Training data
+data/raw/
+
+# Temporary backup files
+*.before_bom_cleanup
+evidence/dev2_audit/*.backup.md

@@ -10,6 +10,7 @@ class VerdictEnum(str, Enum):
     SAFE = "safe"
     SUSPICIOUS = "suspicious"
     MALICIOUS = "malicious"
+    INCONCLUSIVE = "inconclusive"
 
 
 class ActionEnum(str, Enum):
@@ -27,20 +28,30 @@ class ExtractedArtifacts(BaseModel):
     urls: List[str] = Field(default_factory=list)
     qr_urls: List[str] = Field(default_factory=list)
     attachment_hashes: List[Dict[str, str]] = Field(default_factory=list)
-
+    attachment_validation_results: List[Dict[str, str]] = Field(
+    default_factory=list
+)
 
 class AnalysisSignals(BaseModel):
     url_scores: Dict[str, float] = Field(default_factory=dict)
+    url_ml_scores: Dict[str, float] = Field(default_factory=dict)
     vt_reputation: Dict[str, Dict[str, int]] = Field(default_factory=dict)
     static_attachment_flags: List[str] = Field(default_factory=list)
     needs_agent_investigation: bool = False
+    analysis_incomplete: bool = False
+
 
 
 class AgentInvestigationResult(BaseModel):
     reasoning: str
     red_flags: List[str]
-    confidence_delta: float
-
+    confidence_delta: float = Field(
+        ge=-1.0,
+        le=1.0,
+        allow_inf_nan=False,
+    )
+    continue_investigation: bool = False
+    next_question: Optional[str] = None
 
 class FinalSecurityReport(BaseModel):
     message_id: str
