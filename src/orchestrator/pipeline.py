@@ -19,6 +19,7 @@ from src.detection.virustotal import (
 from urllib.parse import urlparse
 from math import log2
 from collections import Counter
+from email.utils import parseaddr
 
 def _domain_entropy(url: str) -> float:
     """Calculate Shannon entropy of a URL hostname."""
@@ -175,9 +176,18 @@ def analyze_artifacts(artifacts: ExtractedArtifacts) -> FinalSecurityReport:
     # Analyze attachment metadata and check existing VirusTotal file reports.
     # Never execute, open, or upload attachments.
     attachment_flags: list[str] = []
-
     for attachment in artifacts.attachment_hashes:
-        attachment_result = analyze_attachment(attachment)
+        try:
+            attachment_result = analyze_attachment(attachment)
+        except Exception:
+            attachment_result = {
+                "status": "unknown",
+                "flags": [],
+            }
+            analysis_incomplete = True
+            extra_evidence.append(
+                "Static attachment analysis failed; manual review is recommended"
+            )
 
         if attachment_result.get("status") != "analyzed":
             analysis_incomplete = True
@@ -185,6 +195,7 @@ def analyze_artifacts(artifacts: ExtractedArtifacts) -> FinalSecurityReport:
         for flag in attachment_result.get("flags", []):
             if isinstance(flag, str) and flag.strip():
                 attachment_flags.append(flag.strip())
+
 
         file_hash = attachment.get("sha256")
         if isinstance(file_hash, str) and file_hash.strip():
@@ -261,14 +272,6 @@ def analyze_artifacts(artifacts: ExtractedArtifacts) -> FinalSecurityReport:
                 "has no usable SHA-256 hash for VirusTotal lookup"
             )
 
-
-        if attachment_result.get("status") != "analyzed":
-            analysis_incomplete = True
-
-        for flag in attachment_result.get("flags", []):
-            if isinstance(flag, str) and flag.strip():
-                attachment_flags.append(flag.strip())
-
         # Include signature validation performed while attachment bytes were available.
     for result in artifacts.attachment_validation_results:
         status = result.get("status")
@@ -284,16 +287,26 @@ def analyze_artifacts(artifacts: ExtractedArtifacts) -> FinalSecurityReport:
             extra_evidence.append(
                 f"Attachment signature validation inconclusive for {filename}: {detail}"
             )
-
     sender = (artifacts.sender or "").strip()
     return_path = (artifacts.return_path or "").strip()
 
-    if sender and return_path and sender.casefold() != return_path.casefold():
-        needs_agent_investigation = True
-        extra_evidence.append(
-            "Return-Path and From addresses differ; "
-            "additional investigation is recommended"
-        )
+    if sender and return_path:
+        sender_email = parseaddr(sender)[1].strip()
+        return_path_email = parseaddr(return_path)[1].strip()
+
+        if "@" in sender_email and "@" in return_path_email:
+            sender_domain = sender_email.rsplit("@", 1)[1].casefold().rstrip(".")
+            return_path_domain = (
+                return_path_email.rsplit("@", 1)[1].casefold().rstrip(".")
+            )
+
+            if sender_domain != return_path_domain:
+                needs_agent_investigation = True
+                extra_evidence.append(
+                    "From and Return-Path domains differ; "
+                    "additional investigation is recommended"
+                )
+
     # Construct signals after processing all attachments.
     signals = AnalysisSignals(
         url_scores=url_scores,
