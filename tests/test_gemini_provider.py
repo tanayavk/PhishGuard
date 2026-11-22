@@ -58,7 +58,12 @@ def test_valid_structured_response_is_returned(mock_client_class, monkeypatch):
     result = investigate_with_gemini("Review supplied evidence")
 
     assert result == VALID_RESULT
-    mock_client_class.assert_called_once_with(api_key="test-key")
+    mock_client_class.assert_called_once()
+
+    client_kwargs = mock_client_class.call_args.kwargs
+
+    assert client_kwargs["api_key"] == "test-key"
+    assert client_kwargs["http_options"].timeout == 15000
     mock_client.models.generate_content.assert_called_once()
 
 

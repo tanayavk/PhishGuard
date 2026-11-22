@@ -35,6 +35,10 @@ def test_pipeline_returns_valid_report_for_clean_artifacts(monkeypatch):
             "reason": "Mocked test: no reputation lookup",
         },
     )
+    monkeypatch.setattr(
+        "src.orchestrator.pipeline.predict_url_risk",
+        lambda url: 0.0,
+    )
 
     artifacts = ExtractedArtifacts(
         message_id="pipeline-001",

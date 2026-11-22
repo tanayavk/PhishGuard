@@ -62,3 +62,4 @@ class FinalSecurityReport(BaseModel):
     composite_risk_score: float
     evidence: List[str]
     agent_notes: Optional[str] = None
+    analysis_audit: list[str] = Field(default_factory=list)
