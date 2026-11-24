@@ -1,5 +1,7 @@
 """Gmail-to-PhishGuard analysis and security labeling."""
 
+from PIL import report
+
 from src.ingestion.gmail_client import fetch_unread_emails
 from src.ingestion.gmail_api import apply_label
 from src.ingestion.processed_registry import (
@@ -8,7 +10,7 @@ from src.ingestion.processed_registry import (
     mark_failed,
 )
 from src.orchestrator.pipeline import analyze_artifacts
-
+from src.reporting.report_store import save_report
 
 class GmailRunnerError(Exception):
     """Raised when Gmail fetching fails."""
@@ -69,7 +71,10 @@ def run_gmail_analysis(max_results: int = 5) -> dict:
 
             report = analyze_artifacts(artifacts)
 
-            # Persist the analysis before attempting Gmail labeling.
+            # Persist the complete security report.
+            save_report(report)
+
+            # Mark the email as successfully processed.
             mark_completed(message_id, report)
 
             verdict = report.verdict.value

@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from src.ingestion.processed_registry import _connect
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 AUDIT_DB_PATH = PROJECT_ROOT / "data" / "cache.db"
@@ -212,3 +214,88 @@ def get_audit_history(
         history.append(record)
 
     return history
+
+def list_audit_history(
+    limit: int = 100,
+    offset: int = 0,
+    message_id: str | None = None
+):
+    """Retrieve audit records with optional message filtering."""
+
+    if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 500:
+        raise ValueError("limit must be between 1 and 500")
+
+    if not isinstance(offset, int) or isinstance(offset, bool) or offset < 0:
+        raise ValueError("offset must be non-negative")
+
+    if message_id is not None:
+        if not isinstance(message_id, str) or not message_id.strip():
+            raise ValueError("message_id must be a non-empty string")
+
+    with _connect() as connection:
+
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS audit_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                message_id TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                risk_score REAL NOT NULL,
+                verdict TEXT NOT NULL,
+                action TEXT NOT NULL,
+                audit_events TEXT NOT NULL
+            )
+        """)
+
+        if message_id:
+            total = connection.execute(
+                "SELECT COUNT(*) FROM audit_logs WHERE message_id = ?",
+                (message_id,)
+            ).fetchone()[0]
+
+            rows = connection.execute(
+                """
+                SELECT id, message_id, timestamp, risk_score,
+                       verdict, action, audit_events
+                FROM audit_logs
+                WHERE message_id = ?
+                ORDER BY timestamp DESC
+                LIMIT ? OFFSET ?
+                """,
+                (message_id, limit, offset)
+            ).fetchall()
+
+        else:
+            total = connection.execute(
+                "SELECT COUNT(*) FROM audit_logs"
+            ).fetchone()[0]
+
+            rows = connection.execute(
+                """
+                SELECT id, message_id, timestamp, risk_score,
+                       verdict, action, audit_events
+                FROM audit_logs
+                ORDER BY timestamp DESC
+                LIMIT ? OFFSET ?
+                """,
+                (limit, offset)
+            ).fetchall()
+
+    records = []
+
+    for row in rows:
+        record = dict(row)
+
+        try:
+            record["audit_events"] = json.loads(record["audit_events"])
+        except (TypeError, json.JSONDecodeError):
+            record["audit_events"] = []
+
+        records.append(record)
+
+    return {
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "message_id": message_id,
+        "audit_logs": records,
+    }

@@ -31,14 +31,16 @@ def create_report(verdict="safe", action="allow", score=5.0):
     report.verdict.value = verdict
     report.action.value = action
     report.composite_risk_score = score
+    report.message_id = "test-message"
     return report
 
 
+@patch("src.ingestion.gmail_runner.save_report")
 @patch("src.ingestion.gmail_runner.apply_label", return_value=True)
 @patch("src.ingestion.gmail_runner.analyze_artifacts")
 @patch("src.ingestion.gmail_runner.fetch_unread_emails")
 def test_successful_gmail_analysis(
-    mock_fetch, mock_analyze, mock_label
+    mock_fetch, mock_analyze, mock_label, mock_save
 ):
     mock_fetch.return_value = [create_artifact("email-1")]
     mock_analyze.return_value = create_report()
@@ -54,17 +56,19 @@ def test_successful_gmail_analysis(
     assert result["results"][0]["label"] == "PhishGuard/Safe"
     assert result["results"][0]["label_applied"] is True
 
+    mock_save.assert_called_once()
     mock_label.assert_called_once_with(
         message_id="email-1",
         label_name="PhishGuard/Safe",
     )
 
 
+@patch("src.ingestion.gmail_runner.save_report")
 @patch("src.ingestion.gmail_runner.apply_label", return_value=True)
 @patch("src.ingestion.gmail_runner.analyze_artifacts")
 @patch("src.ingestion.gmail_runner.fetch_unread_emails")
 def test_analysis_failure_does_not_stop_batch(
-    mock_fetch, mock_analyze, mock_label
+    mock_fetch, mock_analyze, mock_label, mock_save
 ):
     mock_fetch.return_value = [
         create_artifact("email-1"),
@@ -83,6 +87,7 @@ def test_analysis_failure_does_not_stop_batch(
     assert result["failed"] == 1
     assert result["skipped"] == 0
 
+    mock_save.assert_called_once()
     mock_label.assert_called_once()
 
 
@@ -118,11 +123,12 @@ def test_empty_inbox(mock_fetch, mock_analyze):
     mock_analyze.assert_not_called()
 
 
+@patch("src.ingestion.gmail_runner.save_report")
 @patch("src.ingestion.gmail_runner.apply_label", return_value=True)
 @patch("src.ingestion.gmail_runner.analyze_artifacts")
 @patch("src.ingestion.gmail_runner.fetch_unread_emails")
 def test_duplicate_email_is_skipped(
-    mock_fetch, mock_analyze, mock_label
+    mock_fetch, mock_analyze, mock_label, mock_save
 ):
     mock_fetch.return_value = [
         create_artifact("email-1"),
@@ -138,6 +144,7 @@ def test_duplicate_email_is_skipped(
 
     assert mock_analyze.call_count == 1
     assert mock_label.call_count == 1
+    assert mock_save.call_count == 1
 
 
 @pytest.mark.parametrize(
@@ -158,14 +165,16 @@ def test_invalid_verdict_rejected():
         get_security_label("unknown")
 
 
+@patch("src.ingestion.gmail_runner.save_report")
 @patch("src.ingestion.gmail_runner.apply_label")
 @patch("src.ingestion.gmail_runner.analyze_artifacts")
 @patch("src.ingestion.gmail_runner.fetch_unread_emails")
 def test_label_failure_does_not_invalidate_analysis(
-    mock_fetch, mock_analyze, mock_label
+    mock_fetch, mock_analyze, mock_label, mock_save
 ):
     mock_fetch.return_value = [create_artifact("email-1")]
     mock_analyze.return_value = create_report()
+
     mock_label.side_effect = Exception("Gmail API unavailable")
 
     result = run_gmail_analysis()
@@ -175,12 +184,15 @@ def test_label_failure_does_not_invalidate_analysis(
     assert result["labeling_failed"] == 1
     assert result["results"][0]["label_applied"] is False
 
+    mock_save.assert_called_once()
 
+
+@patch("src.ingestion.gmail_runner.save_report")
 @patch("src.ingestion.gmail_runner.apply_label", return_value=True)
 @patch("src.ingestion.gmail_runner.analyze_artifacts")
 @patch("src.ingestion.gmail_runner.fetch_unread_emails")
 def test_malicious_email_receives_correct_label(
-    mock_fetch, mock_analyze, mock_label
+    mock_fetch, mock_analyze, mock_label, mock_save
 ):
     mock_fetch.return_value = [create_artifact("email-2")]
 
@@ -192,6 +204,7 @@ def test_malicious_email_receives_correct_label(
 
     result = run_gmail_analysis()
 
+    assert result["successful"] == 1
     assert result["results"][0]["label"] == "PhishGuard/Malicious"
 
     mock_label.assert_called_once_with(

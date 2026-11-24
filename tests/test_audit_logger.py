@@ -230,3 +230,34 @@ def test_non_string_audit_events_are_ignored(
         "Email analysis started",
         "Email analysis completed",
     ]
+
+def test_list_audit_history_empty_database(tmp_path, monkeypatch):
+    import sqlite3
+
+    test_db = tmp_path / "test_audit.db"
+
+    def test_connect():
+        connection = sqlite3.connect(test_db)
+        connection.row_factory = sqlite3.Row
+        return connection
+
+    monkeypatch.setattr(audit_logger, "_connect", test_connect)
+
+    result = audit_logger.list_audit_history()
+
+    assert result["total"] == 0
+    assert result["audit_logs"] == []
+    
+def test_list_audit_history_invalid_limit():
+    with pytest.raises(ValueError):
+        audit_logger.list_audit_history(limit=0)
+
+
+def test_list_audit_history_invalid_offset():
+    with pytest.raises(ValueError):
+        audit_logger.list_audit_history(offset=-1)
+
+
+def test_list_audit_history_invalid_message_id():
+    with pytest.raises(ValueError):
+        audit_logger.list_audit_history(message_id="")
